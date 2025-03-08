@@ -1,0 +1,84 @@
+
+
+name: Test
+
+on: 
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+
+jobs:
+  check:
+    name: "Cargo check"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: "minimal"
+          toolchain: "stable"
+          override: true
+
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check --all-features
+
+  test:
+    name: "Cargo test"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: actions/checkout@v4
+
+      - uses: "dtolnay/rust-toolchain@stable"
+        with:
+          profile: "minimal"
+          toolchain: "stable"
+          override: true
+
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --tests --examples --all-features
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+
+  fmt:
+    name: "Cargo format"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: "minimal"
+          toolchain: "stable"
+          override: true
+          
+      - run: "rustup component add rustfmt"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo fmt
+
+  clippy:
+    name: "Cargo clippy"
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Check out the repo"
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          profile: "minimal"
+          toolchain: "stable"
+          override: true
+
+      - run: "rustup component add clippy"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo clippy --all-features
+
