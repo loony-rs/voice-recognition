@@ -32,8 +32,13 @@ version = "1.12.0"
 features = ["attributes"]
 
 [features]
+default=["realtime", "batch"]
 realtime = ["dep:tokio-tungstenite", "dep:tokio", "dep:http"]
 batch = ["dep:reqwest", "dep:rand"]
+
+[[example]]
+name = "test-realtime"
+path = "examples/test-realtime.rs"
 
 [[example]]
 name = "realtim-basic"
