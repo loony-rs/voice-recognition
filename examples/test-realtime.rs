@@ -4,6 +4,11 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::{self, fs::File, try_join};
+use axum::{
+    extract::ws::{Message, WebSocketUpgrade}, http::Response, response::IntoResponse, routing::get, Router
+};
+use tokio::net::TcpListener;
+use futures_util::{StreamExt, SinkExt};
 
 struct MockStore {
     transcript: String,
@@ -27,6 +32,42 @@ impl MockStore {
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+    let app = Router::new()
+    .route("/", get(home))
+    .route("/ws", get(websocket_handler));
+    
+    let listener = TcpListener::bind("127.0.0.1:7000").await.unwrap();
+    log::debug!("Listening on {}", "127.0.0.1:7000");
+    axum::serve(listener, app).await.unwrap();
+}
+
+async fn home() -> impl IntoResponse {
+    "Welcome!"
+}
+
+async fn websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(|mut socket| async move {
+        while let Some(Ok(msg)) = socket.next().await {
+            match msg {
+                Message::Text(utf8_bytes) => {
+                    log::debug!("{}", utf8_bytes.as_str());
+                },
+                Message::Binary(bytes) => {},
+                Message::Close(close_frame) => {},
+                _ => {}
+                // Message::Ping(bytes) => todo!(),
+                // Message::Pong(bytes) => todo!(),
+            }
+            // if msg. || msg.is_binary() {
+            //     socket.send(msg).await.expect("Failed to send message");
+            // }
+        }
+    })
+}
+
+
+async fn translate() {
     let api_key: String = std::env::var("API_KEY").unwrap();
     let (mut rt_session, mut receive_channel) = RealtimeSession::new(api_key, None).unwrap();
 
@@ -60,9 +101,15 @@ async fn main() {
         }
     });
 
-    // let t_: ProcessMessages = rt_session.test_run(config, file).await.unwrap();
-    //         let sender = rt_session.internal_message_sender.clone();
-    //     // let process_messages = { RealtimeSession::process_messages(sock_receiver, sender) };
+    let run_task = { rt_session.run(config, file) };
+
+    try_join!(
+        async move { message_task.await.map_err(anyhow::Error::from) },
+        run_task
+    )
+    .unwrap();
+
+    mock_store.lock().unwrap().print();
 
 
 }
