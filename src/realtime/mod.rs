@@ -343,6 +343,37 @@ impl RealtimeSession {
         Ok(())
     }
 
+    /// Test run
+    pub async fn test_run(
+        &mut self,
+        config: SessionConfig,
+        socket: WebSocket
+    ) -> Result<(), anyhow::Error> {
+        let (mut sock_sender, mut sock_receiver) = self.connect().await?;
+        sock_sender.start_recognition(config).await?;
+        self.wait_for_start(&mut sock_receiver, &self.internal_message_sender.clone())
+            .await?;
+
+        let sender = &self.internal_message_sender.clone();
+        let process_messages = { RealtimeSession::process_messages(sock_receiver, sender) };
+        let send_audio = { sock_sender.handle_socket_connection(socket) };
+
+        pin_mut!(process_messages, send_audio);
+        let (messages_res, audio_res) = join!(process_messages, send_audio);
+        match audio_res {
+            Ok(_) => debug!("No issues in audio processing task"),
+            Err(err) => return Err(err),
+        };
+        match messages_res {
+            Ok(_) => debug!("No issues detected whilst processing server-sent messages"),
+            Err(err) => {
+                error!("{:?}", err);
+                return Err(err);
+            }
+        };
+        Ok(())
+    }
+
     async fn process_messages(
         mut receiver: SplitStreamAlias,
         channel_sender: &tokio::sync::mpsc::UnboundedSender<ReadMessage>,
@@ -436,16 +467,16 @@ impl SenderWrapper {
     async fn handle_socket_connection(
         &mut self,
         mut websocket: WebSocket,
-        config: SessionConfig
+        // config: SessionConfig
     ) -> Result<()> {
         while let Some(data) = websocket.next().await {
             if let Ok(data) = data {
                 match  data {
                     axum::extract::ws::Message::Text(utf8_bytes) => {
                         let msg = utf8_bytes.to_string();
-                        if &msg == "start" {
-                            self.start_recognition(config.clone()).await?;
-                        }
+                        // if &msg == "start" {
+                        //     self.start_recognition(config.clone()).await?;
+                        // }
                         if &msg == "close" {
                             self.send_close(self.last_seq_no).await?;
                             break;
@@ -500,7 +531,7 @@ impl SenderWrapper {
         }
         let serialised_msg = serde_json::to_string(&message)?;
         let ws_message = Message::from(serialised_msg);
-        debug!("sending StartRecognition message {:?}", ws_message);
+        info!("sending StartRecognition message {:?}", ws_message);
         self.send_message(ws_message).await
     }
 

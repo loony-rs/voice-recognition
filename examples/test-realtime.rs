@@ -5,7 +5,7 @@ use std::{
 };
 use tokio::{self, fs::File, try_join};
 use axum::{
-    extract::ws::{Message, WebSocketUpgrade}, http::Response, response::IntoResponse, routing::get, Router
+    extract::ws::{Message, WebSocket, WebSocketUpgrade}, http::Response, response::IntoResponse, routing::get, Router
 };
 use tokio::net::TcpListener;
 use futures_util::{StreamExt, SinkExt};
@@ -38,7 +38,7 @@ async fn main() {
     .route("/ws", get(websocket_handler));
     
     let listener = TcpListener::bind("127.0.0.1:7000").await.unwrap();
-    log::debug!("Listening on {}", "127.0.0.1:7000");
+    log::info!("Listening on {}", "127.0.0.1:7000");
     axum::serve(listener, app).await.unwrap();
 }
 
@@ -47,40 +47,26 @@ async fn home() -> impl IntoResponse {
 }
 
 async fn websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(|mut socket| async move {
-        while let Some(Ok(msg)) = socket.next().await {
-            match msg {
-                Message::Text(utf8_bytes) => {
-                    log::debug!("{}", utf8_bytes.as_str());
-                },
-                Message::Binary(bytes) => {},
-                Message::Close(close_frame) => {},
-                _ => {}
-                // Message::Ping(bytes) => todo!(),
-                // Message::Pong(bytes) => todo!(),
-            }
-            // if msg. || msg.is_binary() {
-            //     socket.send(msg).await.expect("Failed to send message");
-            // }
-        }
+    ws.on_upgrade(|socket| async move {
+        translate(socket).await;
     })
 }
 
 
-async fn translate() {
+async fn translate(socket: WebSocket) {
     let api_key: String = std::env::var("API_KEY").unwrap();
     let (mut rt_session, mut receive_channel) = RealtimeSession::new(api_key, None).unwrap();
 
-    let test_file_path = PathBuf::new()
-        .join(".")
-        .join("tests")
-        .join("data")
-        .join("example.wav");
+    // let test_file_path = PathBuf::new()
+    //     .join(".")
+    //     .join("tests")
+    //     .join("data")
+    //     .join("example.wav");
 
-    let file = File::open(test_file_path).await.unwrap();
+    // let file = File::open(test_file_path).await.unwrap();
 
     let mut config: SessionConfig = Default::default();
-    let audio_config = models::AudioFormat::new(models::audio_format::Type::File);
+    let audio_config = models::AudioFormat::new(models::audio_format::Type::Raw);
     config.audio_format = Some(audio_config);
 
     let mock_store = Arc::new(Mutex::new(MockStore::new()));
@@ -101,7 +87,7 @@ async fn translate() {
         }
     });
 
-    let run_task = { rt_session.run(config, file) };
+    let run_task = { rt_session.test_run(config, socket) };
 
     try_join!(
         async move { message_task.await.map_err(anyhow::Error::from) },
