@@ -483,7 +483,9 @@ impl SenderWrapper {
                         }
                     },
                     axum::extract::ws::Message::Binary(bytes) => {
-                        self.send_message(Message::from(&bytes[..])).await?;
+                        let x = Message::from(&bytes[..]);
+                        println!("data: {:?}", x);
+                        self.send_message(x).await?;
                         self.last_seq_no += 1;
                     },
                     axum::extract::ws::Message::Close(close_frame) => {
