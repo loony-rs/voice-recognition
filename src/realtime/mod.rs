@@ -1,6 +1,7 @@
 //! This module is the main entrypoint for all realtime-related code, including the creation of session structs
 
 use anyhow::Result;
+use axum::extract::ws::WebSocket;
 use base64::{engine::general_purpose, Engine as _};
 use futures::{
     pin_mut,
@@ -430,6 +431,39 @@ impl SenderWrapper {
                 }
             };
         }
+    }
+
+    async fn handle_socket_connection(
+        &mut self,
+        mut websocket: WebSocket,
+        config: SessionConfig
+    ) -> Result<()> {
+        while let Some(data) = websocket.next().await {
+            if let Ok(data) = data {
+                match  data {
+                    axum::extract::ws::Message::Text(utf8_bytes) => {
+                        let msg = utf8_bytes.to_string();
+                        if &msg == "start" {
+                            self.start_recognition(config.clone()).await?;
+                        }
+                        if &msg == "close" {
+                            self.send_close(self.last_seq_no).await?;
+                            break;
+                        }
+                    },
+                    axum::extract::ws::Message::Binary(bytes) => {
+                        self.send_message(Message::from(&bytes[..])).await?;
+                        self.last_seq_no += 1;
+                    },
+                    axum::extract::ws::Message::Close(close_frame) => {
+                        self.send_close(self.last_seq_no).await?;
+                        break;
+                    },
+                    _ => {}
+                }
+            }
+        };
+        Ok(())
     }
 
     async fn send_message(&mut self, message: Message) -> Result<()> {
