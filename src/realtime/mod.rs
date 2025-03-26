@@ -12,7 +12,7 @@ use http::Request;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde_json::from_slice;
-use std::boxed::Box;
+use std::{boxed::Box, io::Read};
 use tokio::{
     io::AsyncReadExt,
     join,
@@ -324,7 +324,7 @@ impl RealtimeSession {
             .await?;
 
         let sender = &self.internal_message_sender.clone();
-        let process_messages = { RealtimeSession::process_messages(sock_receiver, sender) };
+        let process_messages = { RealtimeSession::process_messages(&mut sock_receiver, sender) };
         let send_audio = { sock_sender.send_audio(reader) };
 
         pin_mut!(process_messages, send_audio);
@@ -347,35 +347,51 @@ impl RealtimeSession {
     pub async fn test_run(
         &mut self,
         config: SessionConfig,
-        socket: WebSocket
+        socket: &mut WebSocket
     ) -> Result<(), anyhow::Error> {
         let (mut sock_sender, mut sock_receiver) = self.connect().await?;
-        sock_sender.start_recognition(config).await?;
-        self.wait_for_start(&mut sock_receiver, &self.internal_message_sender.clone())
-            .await?;
-
+        self.wait_for_start(&mut sock_receiver, &self.internal_message_sender.clone()).await?;
         let sender = &self.internal_message_sender.clone();
-        let process_messages = { RealtimeSession::process_messages(sock_receiver, sender) };
-        let send_audio = { sock_sender.handle_socket_connection(socket) };
-
-        pin_mut!(process_messages, send_audio);
-        let (messages_res, audio_res) = join!(process_messages, send_audio);
-        match audio_res {
-            Ok(_) => debug!("No issues in audio processing task"),
-            Err(err) => return Err(err),
+        let x = { RealtimeSession::process_messages(&mut sock_receiver, sender) };
+        let y = {
+            self.handle_socket_messages(config, socket, &mut sock_sender)
         };
-        match messages_res {
-            Ok(_) => debug!("No issues detected whilst processing server-sent messages"),
-            Err(err) => {
-                error!("{:?}", err);
-                return Err(err);
+        
+        pin_mut!(x, y);
+        let (messages_res, audio_res) = join!(x, y);
+        Ok(())
+    }
+    
+    async fn handle_socket_messages(
+        &mut self, 
+        config: SessionConfig,
+        socket: &mut WebSocket,
+        sock_sender: &mut SenderWrapper
+    ) -> Result<(), anyhow::Error> {
+        let mut last_seq_no = 0;
+        while let Some(Ok(msg)) = socket.recv().await {
+            match msg {
+                axum::extract::ws::Message::Text(text) => {
+                    tracing::info!("Received: {}", text);
+                    sock_sender.start_recognition(config.clone()).await?;
+                }
+                axum::extract::ws::Message::Binary(data) => {
+                    let ws_message = Message::Binary(data.to_vec());
+                    sock_sender.send_message(ws_message).await?;
+                    last_seq_no += 1;
+                }
+                axum::extract::ws::Message::Close(_) => {
+                    sock_sender.send_close(last_seq_no).await?;
+                    break;
+                }
+                _ => {}
             }
-        };
+        }
         Ok(())
     }
 
     async fn process_messages(
-        mut receiver: SplitStreamAlias,
+        receiver: &mut SplitStreamAlias,
         channel_sender: &tokio::sync::mpsc::UnboundedSender<ReadMessage>,
     ) -> Result<()> {
         let mut running = true;
@@ -533,7 +549,7 @@ impl SenderWrapper {
         }
         let serialised_msg = serde_json::to_string(&message)?;
         let ws_message = Message::from(serialised_msg);
-        info!("sending StartRecognition message {:?}", ws_message);
+        println!("sending StartRecognition message {:?}", ws_message);
         self.send_message(ws_message).await
     }
 
@@ -541,6 +557,7 @@ impl SenderWrapper {
         let message =
             models::EndOfStream::new(last_seq_no, models::end_of_stream::Message::EndOfStream);
         let serialised_msg = serde_json::to_string(&message)?;
+        println!("{}", serialised_msg);
         let tungstenite_msg = Message::from(serialised_msg);
         self.send_message(tungstenite_msg).await
     }

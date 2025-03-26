@@ -27,7 +27,7 @@ impl MockStore {
 
 #[tokio::main]
 async fn main() {
-    let api_key: String = std::env::var("API_KEY").unwrap();
+    let api_key: String = "evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6".to_string();
     let (mut rt_session, mut receive_channel) = RealtimeSession::new(api_key, None).unwrap();
 
     let test_file_path = PathBuf::new()
