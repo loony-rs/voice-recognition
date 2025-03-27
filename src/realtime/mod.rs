@@ -347,33 +347,47 @@ impl RealtimeSession {
     pub async fn test_run(
         &mut self,
         config: SessionConfig,
-        socket: &mut WebSocket
+        receiver: &mut SplitStream<WebSocket>
     ) -> Result<(), anyhow::Error> {
         let (mut sock_sender, mut sock_receiver) = self.connect().await?;
-        self.wait_for_start(&mut sock_receiver, &self.internal_message_sender.clone()).await?;
         let sender = &self.internal_message_sender.clone();
-        let x = { RealtimeSession::process_messages(&mut sock_receiver, sender) };
-        let y = {
-            self.handle_socket_messages(config, socket, &mut sock_sender)
+        let process_messages = { RealtimeSession::process_messages(&mut sock_receiver, sender) };
+        let socket_messages = {
+            self.handle_socket_messages(config, receiver, &mut sock_sender)
         };
         
-        pin_mut!(x, y);
-        let (_, _) = join!(x, y);
+        pin_mut!(process_messages, socket_messages);
+        let (messages_res, socket_res) = join!(process_messages, socket_messages);
+        match socket_res {
+            Ok(_) => debug!("No issues in audio processing task"),
+            Err(err) => return Err(err),
+        };
+        match messages_res {
+            Ok(_) => debug!("No issues detected whilst processing server-sent messages"),
+            Err(err) => {
+                error!("{:?}", err);
+                return Err(err);
+            }
+        };
         Ok(())
     }
     
     async fn handle_socket_messages(
         &mut self, 
         config: SessionConfig,
-        socket: &mut WebSocket,
+        receiver: &mut SplitStream<WebSocket>,
         sock_sender: &mut SenderWrapper
     ) -> Result<(), anyhow::Error> {
         let mut last_seq_no = 0;
-        while let Some(Ok(msg)) = socket.recv().await {
+        while let Some(Ok(msg)) = receiver.next().await {
             match msg {
-                axum::extract::ws::Message::Text(text) => {
-                    tracing::info!("Received: {}", text);
-                    sock_sender.start_recognition(config.clone()).await?;
+                axum::extract::ws::Message::Text(utf8_bytes) => {
+                    if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
+                        sock_sender.start_recognition(config.clone()).await?;
+                    }
+                    if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
+                        sock_sender.send_close(last_seq_no).await?;
+                    }
                 }
                 axum::extract::ws::Message::Binary(data) => {
                     let ws_message = Message::Binary(data.to_vec());
