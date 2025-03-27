@@ -12,7 +12,7 @@ use http::Request;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde_json::from_slice;
-use std::{boxed::Box, io::Read};
+use std::boxed::Box;
 use tokio::{
     io::AsyncReadExt,
     join,
@@ -358,7 +358,7 @@ impl RealtimeSession {
         };
         
         pin_mut!(x, y);
-        let (messages_res, audio_res) = join!(x, y);
+        let (_, _) = join!(x, y);
         Ok(())
     }
     

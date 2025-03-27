@@ -65,16 +65,6 @@ async fn start_recognition(ws_stream: WebSocketStream<MaybeTlsStream<TcpStream>>
     let mut data = Vec::new();
     file.read_to_end(&mut data).await.unwrap();
     let ( mut sender, mut receiver) = ws_stream.split();
-    // let start_recognition = StartRecognition {
-    //     message: "StartRecognition".to_string(),
-    //     audio_format: AudioFormat {
-    //         r#type: "raw".to_string(),
-    //         encoding: "pcm_s16le".to_string(),
-    //         sample_rate: 16000,
-    //     },
-    // };
-
-    // let msg = serde_json::to_string(&start_recognition).unwrap();
 
     let msg = serde_json::json!({
         "message": "StartRecognition",
