@@ -154,10 +154,10 @@ impl RealtimeSession {
         if let Some(temp_url) = rt_url {
             url = temp_url
         }
-        let formatted_url = format!("{}?sm-sdk=rust-{}", url, VERSION);
+        // let formatted_url = format!("{}?sm-sdk=rust-{}", url, VERSION);
         let sesh = Self {
             auth_token,
-            rt_url: formatted_url,
+            rt_url: url,
             internal_message_sender: channel_sender,
         };
         Ok((sesh, channel_receiver))
@@ -385,7 +385,7 @@ impl RealtimeSession {
                     if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
                         sock_sender.start_recognition(config.clone()).await?;
                     }
-                    if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
+                    if utf8_bytes.as_str() == "STOP_VOICE_RECORDING" {
                         sock_sender.send_close(last_seq_no).await?;
                     }
                 }
@@ -494,41 +494,6 @@ impl SenderWrapper {
         }
     }
 
-    async fn handle_socket_connection(
-        &mut self,
-        mut websocket: WebSocket,
-        // config: SessionConfig
-    ) -> Result<()> {
-        while let Some(data) = websocket.next().await {
-            if let Ok(data) = data {
-                match  data {
-                    axum::extract::ws::Message::Text(utf8_bytes) => {
-                        let msg = utf8_bytes.to_string();
-                        // if &msg == "start" {
-                        //     self.start_recognition(config.clone()).await?;
-                        // }
-                        if &msg == "close" {
-                            self.send_close(self.last_seq_no).await?;
-                            break;
-                        }
-                    },
-                    axum::extract::ws::Message::Binary(bytes) => {
-                        let x = Message::from(&bytes[..]);
-                        println!("data: {:?}", x);
-                        self.send_message(x).await?;
-                        self.last_seq_no += 1;
-                    },
-                    axum::extract::ws::Message::Close(close_frame) => {
-                        self.send_close(self.last_seq_no).await?;
-                        break;
-                    },
-                    _ => {}
-                }
-            }
-        };
-        Ok(())
-    }
-
     async fn send_message(&mut self, message: Message) -> Result<()> {
         let mut retries = 0;
         let max_retries = 5;
@@ -561,9 +526,31 @@ impl SenderWrapper {
         if let Some(transl) = config.translation_config {
             message.translation_config = Some(Box::new(transl));
         }
-        let serialised_msg = serde_json::to_string(&message)?;
-        let ws_message = Message::from(serialised_msg);
-        println!("sending StartRecognition message {:?}", ws_message);
+        // let serialised_msg = serde_json::to_string(&message)?;
+        let msg = serde_json::json!({
+            "message": "StartRecognition",
+            "audio_format": {
+              "type": "raw",
+              "encoding": "pcm_s16le",
+              "sample_rate": 16000
+            },
+            "transcription_config": {
+              "language": "en",
+              "operating_point": "enhanced",
+              "output_locale": "en-US",
+              "additional_vocab": ["gnocchi", "bucatini", "bigoli"],
+              "diarization": "speaker",
+              "enable_partials": false
+            },
+            "translation_config": {
+              "target_languages": [],
+              "enable_partials": false
+            },
+            "audio_events_config": {
+              "types": ["applause", "music"]
+            }
+          });
+        let ws_message = Message::from(msg.to_string());
         self.send_message(ws_message).await
     }
 
@@ -571,7 +558,6 @@ impl SenderWrapper {
         let message =
             models::EndOfStream::new(last_seq_no, models::end_of_stream::Message::EndOfStream);
         let serialised_msg = serde_json::to_string(&message)?;
-        println!("{}", serialised_msg);
         let tungstenite_msg = Message::from(serialised_msg);
         self.send_message(tungstenite_msg).await
     }

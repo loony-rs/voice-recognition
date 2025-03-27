@@ -55,7 +55,7 @@ async fn handle_socket(socket: WebSocket) {
     let ( _, mut receiver) = socket.split();
 
     let api_key: String = "evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6".to_string();
-    let (mut rt_session, mut receive_channel) = RealtimeSession::new(api_key, None).unwrap();
+    let (mut rt_session, mut receive_channel) = RealtimeSession::new(api_key, Some("wss://eu2.rt.speechmatics.com/v2?jwt=evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6".to_string())).unwrap();
 
 
     let mut config: SessionConfig = Default::default();
