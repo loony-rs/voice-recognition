@@ -1,5 +1,5 @@
 [package]
-name = "speechmatics"
+name = "loony-speechmatics"
 version = "0.3.3"
 edition = "2021"
 keywords = ["websocket", "speechmatics", "asr", "async"]

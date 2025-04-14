@@ -5,13 +5,19 @@ use axum::{
     Router,
 };
 use axum::extract::ws::WebSocket;
-use tokio_tungstenite::tungstenite;
+use futures::stream::{SplitStream, SplitSink};
+use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
 use futures::{SinkExt, StreamExt};
 use tokio_tungstenite::connect_async;
 use url::Url;
 use base64::{engine::general_purpose, Engine as _};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+
+type SpeechmaticsSender = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
+type SpeechmaticsReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 
 #[tokio::main]
 async fn main() {
@@ -26,15 +32,16 @@ async fn main() {
   axum::serve(listener, app).await.unwrap();
 }
 
-/// WebSocket handler
-async fn websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(handle_socket)
+struct SpeechmaticsReceiverDrop;
+
+impl Drop for SpeechmaticsReceiverDrop {
+    fn drop(&mut self) {
+        println!("Task memory was dropped");
+    }
 }
 
-/// Handles the WebSocket connection
-async fn handle_socket(socket: WebSocket) {
-    let ( _, mut receiver) = socket.split();
 
+async fn connect_speechmatics() -> std::result::Result<(SpeechmaticsSender, SpeechmaticsReceiver), ()> {
     let url = Url::parse("wss://eu2.rt.speechmatics.com/v2?jwt=evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6").unwrap();
     let sec_key: String = thread_rng()
         .sample_iter(&Alphanumeric)
@@ -42,7 +49,7 @@ async fn handle_socket(socket: WebSocket) {
         .map(char::from)
         .collect();
     let b64 = general_purpose::STANDARD.encode(sec_key);
-    println!("{}", b64);
+
     let request = http::Request::builder()
         .method("GET")
         .uri(url.as_str())
@@ -56,7 +63,18 @@ async fn handle_socket(socket: WebSocket) {
         .unwrap();
 
     let (speechmatics_stream, _) = connect_async(request).await.expect("Failed to connect");
-    let (mut speechmatics_sender, mut speechmatics_receiver) = speechmatics_stream.split();
+    Ok(speechmatics_stream.split())
+}
+
+/// WebSocket handler
+async fn websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(handle_socket)
+}
+
+/// Handles the WebSocket connection
+async fn handle_socket(socket: WebSocket) {
+    let ( _, mut receiver) = socket.split();
+    let (mut speechmatics_sender, mut speechmatics_receiver) = connect_speechmatics().await.unwrap();
 
     let msg = serde_json::json!({
         "message": "StartRecognition",
@@ -81,7 +99,40 @@ async fn handle_socket(socket: WebSocket) {
           "types": ["applause", "music"]
         }
       });
+      
       tokio::spawn(async move {
+        let mut last_seq_no = 0;
+        while let Some(data) = receiver.next().await {
+            if let Ok(data) = data {
+                match data {
+                    axum::extract::ws::Message::Text(utf8_bytes) => {
+                        if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
+                            speechmatics_sender.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
+                        }
+                        if utf8_bytes.as_str() == "STOP_VOICE_RECORDING" {
+                            let close_msg = serde_json::json!({
+                                "message": "EndOfStream",
+                                "last_seq_no": last_seq_no
+                            });
+                            speechmatics_sender.send(tungstenite::Message::Text(close_msg.to_string())).await.unwrap();
+    
+                        }
+                    },
+                    axum::extract::ws::Message::Binary(bytes) => {
+                        speechmatics_sender.send(tungstenite::Message::binary(bytes.to_vec())).await.unwrap();
+                        last_seq_no += 1;
+                        
+                    },
+                    _ => {}
+                }
+            }
+        }
+      });
+
+
+    tokio::spawn(async move {
+        let _guard = SpeechmaticsReceiverDrop;
+
         loop {
             let value = speechmatics_receiver.next().await;
             if let Some(value) = value {
@@ -95,31 +146,6 @@ async fn handle_socket(socket: WebSocket) {
                 }
             }
         }
-      });
-      let mut last_seq_no = 0;
-    while let Some(data) = receiver.next().await {
-        if let Ok(data) = data {
-            match data {
-                axum::extract::ws::Message::Text(utf8_bytes) => {
-                    if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
-                        speechmatics_sender.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
-                    }
-                    if utf8_bytes.as_str() == "STOP_VOICE_RECORDING" {
-                        let close_msg = serde_json::json!({
-                            "message": "EndOfStream",
-                            "last_seq_no": last_seq_no
-                        });
-                        speechmatics_sender.send(tungstenite::Message::Text(close_msg.to_string())).await.unwrap();
+    });
 
-                    }
-                },
-                axum::extract::ws::Message::Binary(bytes) => {
-                    speechmatics_sender.send(tungstenite::Message::binary(bytes.to_vec())).await.unwrap();
-                    last_seq_no += 1;
-                    
-                },
-                _ => {}
-            }
-        }
-    }
 }

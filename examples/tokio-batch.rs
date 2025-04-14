@@ -1,4 +1,4 @@
-use speechmatics::batch::{
+use loony_speechmatics::batch::{
     models::{self, JobConfig, TranscriptionConfig},
     BatchClient,
 };

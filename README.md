@@ -18,7 +18,7 @@ In order to connect to the API, you will also need an API key. You can get a key
 To transcribe in realtime, you'll need to install the tokio and speechmatics crates. Then you can run the following code in your main.rs file. Don't forget to update the API key and file path. The following example creates a mock store to demonstrate how outputs from the RealtimeSession can be passed through to some external state, for example a database or an API request to an external system.
 
 ```rs
-use speechmatics::realtime::*;
+use loony_speechmatics::realtime::*;
 use std::{path::PathBuf, sync::{Arc, Mutex}};
 use tokio::{self, fs::File, try_join};
 
@@ -89,7 +89,7 @@ async fn main() {
 To transcribe in batch, you'll need to install the an async runtime of your choice. Here, we're using tokio for consistency's sake. Then the following code can be added to your main.rs file and run. Don't forget to update the API key and file path.
 
 ```rs
-use speechmatics::batch::{
+use loony_speechmatics::batch::{
     models::{self, JobConfig, TranscriptionConfig},
     BatchClient,
 };

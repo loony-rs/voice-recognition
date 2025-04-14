@@ -60,7 +60,7 @@ impl BatchClient {
     /// ```
     /// use std::path::PathBuf;
     /// use std::box::Box;
-    /// use speechmatics::batch::{
+    /// use loony_speechmatics::batch::{
     ///     BatchClient,
     ///     models::{JobConfig, TranscriptionConfig}
     /// };
@@ -123,7 +123,7 @@ impl BatchClient {
     /// # Example
     ///
     /// ```
-    /// use speechmatics::batch::BatchClient;
+    /// use loony_speechmatics::batch::BatchClient;
     ///
     /// let batch_client = BatchClient::new("API_KEY", None).unwrap();
     /// let get_job_res = batch_client.get_job("JOB_ID").await.unwrap();
@@ -158,7 +158,7 @@ impl BatchClient {
     /// # Example
     ///
     /// ```
-    /// use speechmatics::batch::BatchClient;
+    /// use loony_speechmatics::batch::BatchClient;
     ///
     /// let batch_client = BatchClient::new("API_KEY", None).unwrap();
     /// let jobs = batch_client.get_jobs(Some(5), Some(true)).await.unwrap();
@@ -200,7 +200,7 @@ impl BatchClient {
     ///
     /// ```
     /// use std::println;
-    /// use speechmatics::batch::BatchClient;
+    /// use loony_speechmatics::batch::BatchClient;
     ///
     /// let batch_client = BatchClient::new("API_KEY", None).unwrap();
     /// let get_result_res = batch_client.get_json_result("JOB_ID").await.unwrap();
@@ -241,7 +241,7 @@ impl BatchClient {
     ///
     /// ```
     /// use std::println;
-    /// use speechmatics::batch::BatchClient;
+    /// use loony_speechmatics::batch::BatchClient;
     ///
     /// let batch_client = BatchClient::new("API_KEY", None).unwrap();
     /// let get_result_res = batch_client.get_text_result("JOB_ID").await.unwrap();
@@ -282,7 +282,7 @@ impl BatchClient {
     ///
     /// ```
     /// use std::println;
-    /// use speechmatics::batch::BatchClient;
+    /// use loony_speechmatics::batch::BatchClient;
     ///
     /// let batch_client = BatchClient::new("API_KEY", None).unwrap();
     /// let get_result_res = batch_client.get_text_result("JOB_ID").await.unwrap();
@@ -325,7 +325,7 @@ impl BatchClient {
     ///
     /// ```
     /// use std::println;
-    /// use speechmatics::batch::BatchClient;
+    /// use loony_speechmatics::batch::BatchClient;
     ///
     /// let batch_client = BatchClient::new("API_KEY", None).unwrap();
     /// let get_result_res = batch_client.delete_job("JOB_ID", Some(true)).await.unwrap();
