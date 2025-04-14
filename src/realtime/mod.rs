@@ -1,7 +1,6 @@
 //! This module is the main entrypoint for all realtime-related code, including the creation of session structs
 
 use anyhow::Result;
-use axum::extract::ws::WebSocket;
 use base64::{engine::general_purpose, Engine as _};
 use futures::{
     pin_mut,
@@ -42,7 +41,7 @@ pub const DEFAULT_RT_URL: &str = "wss://neu.rt.speechmatics.com/v2/en";
 
 /// The default ISO language code, which sets it to English.
 pub const DEFAULT_LANGUAGE: &str = "en";
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+// const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Enum of all messages that can be read by an end user. This enum is passed to the receive channel that can be used to read messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -238,7 +237,7 @@ impl RealtimeSession {
                         continue;
                     }
                 };
-
+                
                 let bin_data = message.into_data();
                 // this deserialise will fail if not the right message type
                 match serde_json::from_slice::<models::RecognitionStarted>(&bin_data) {
@@ -440,6 +439,7 @@ impl SenderWrapper {
             match self.socket.send(message.clone()).await {
                 Ok(()) => (),
                 Err(err) => {
+                    println!("err: {:?}", err);
                     retries += 1;
                     if retries >= max_retries {
                         self.socket.send(message).await?;

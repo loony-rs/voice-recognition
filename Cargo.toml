@@ -43,10 +43,6 @@ realtime = ["dep:tokio-tungstenite", "dep:tokio", "dep:http"]
 batch = ["dep:reqwest", "dep:rand"]
 
 [[example]]
-name = "test-realtime"
-path = "examples/test-realtime.rs"
-
-[[example]]
 name = "realtim-basic"
 path = "examples/realtime-basic.rs"
 

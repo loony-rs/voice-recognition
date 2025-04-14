@@ -6,6 +6,7 @@ use axum::{
 };
 use axum::extract::ws::WebSocket;
 use futures::stream::{SplitStream, SplitSink};
+use loony_speechmatics::realtime::ReadMessage;
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
@@ -15,6 +16,7 @@ use url::Url;
 use base64::{engine::general_purpose, Engine as _};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+// use loony_speechmatics::realtime::ReadMessage;
 
 type SpeechmaticsSender = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 type SpeechmaticsReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
@@ -36,7 +38,7 @@ struct SpeechmaticsReceiverDrop;
 
 impl Drop for SpeechmaticsReceiverDrop {
     fn drop(&mut self) {
-        println!("Task memory was dropped");
+        log::info!("SpeechmaticsReceiverDropped");
     }
 }
 
@@ -99,8 +101,9 @@ async fn handle_socket(socket: WebSocket) {
           "types": ["applause", "music"]
         }
       });
-      
-      tokio::spawn(async move {
+
+    let handle1 = tokio::spawn(async move {
+        let _ = SpeechmaticsReceiverDrop;
         let mut last_seq_no = 0;
         while let Some(data) = receiver.next().await {
             if let Ok(data) = data {
@@ -131,14 +134,34 @@ async fn handle_socket(socket: WebSocket) {
 
 
     tokio::spawn(async move {
-        let _guard = SpeechmaticsReceiverDrop;
-
+        let _ = SpeechmaticsReceiverDrop;
         loop {
             let value = speechmatics_receiver.next().await;
             if let Some(value) = value {
                 match value {
                     Ok(msg) => {
-                        log::info!("{:?}", msg);
+                        println!("{:?}", msg);
+                        let data = msg.into_data();
+                        let data = serde_json::from_slice::<ReadMessage>(&data);
+                        if let Ok(data) = data {
+                            match data {
+                                ReadMessage::RecognitionStarted(_) => {
+                                    log::info!("RecognitionStarted");
+                                },
+                                ReadMessage::Error(error) => {
+                                    log::error!("Error: {:?}", error);
+                                },
+                                ReadMessage::AddTranscript(message) => {
+                                    log::info!("{:?}", message.metadata.transcript);
+                                },
+                                ReadMessage::EndOfTranscript(_) => {
+                                    log::info!("EndOfTranscript");
+                                    handle1.abort();
+                                    break;
+                                },
+                                _ => {}
+                            }
+                        }
                     },
                     Err(err) => {
                         log::error!("{:?}", err);
