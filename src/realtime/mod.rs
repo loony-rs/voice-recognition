@@ -383,9 +383,11 @@ impl RealtimeSession {
             match msg {
                 axum::extract::ws::Message::Text(utf8_bytes) => {
                     if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
+                        log::info!("START_VOICE_RECORDING");
                         sock_sender.start_recognition(config.clone()).await?;
                     }
                     if utf8_bytes.as_str() == "STOP_VOICE_RECORDING" {
+                        log::info!("STOP_VOICE_RECORDING");
                         sock_sender.send_close(last_seq_no).await?;
                     }
                 }

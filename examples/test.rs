@@ -13,25 +13,6 @@ use axum::{
 use axum::extract::ws::WebSocket;
 use futures::{SinkExt, StreamExt};
 
-struct MockStore {
-    transcript: String,
-}
-
-impl MockStore {
-    pub fn new() -> Self {
-        Self {
-            transcript: "".to_owned(),
-        }
-    }
-
-    pub fn append(&mut self, transcript: String) {
-        self.transcript = format!("{} {}", self.transcript, transcript);
-    }
-
-    pub fn print(&self) {
-        print!("{}", self.transcript)
-    }
-}
 
 #[tokio::main]
 async fn main() {
@@ -62,17 +43,11 @@ async fn handle_socket(socket: WebSocket) {
     let audio_config = models::AudioFormat::new(models::audio_format::Type::Raw);
     config.audio_format = Some(audio_config);
 
-    let mock_store = Arc::new(Mutex::new(MockStore::new()));
-    let mock_store_clone = mock_store.clone();
-
     let message_task = tokio::spawn(async move {
         while let Some(message) = receive_channel.recv().await {
             match message {
                 ReadMessage::AddTranscript(mess) => {
-                    mock_store_clone
-                        .lock()
-                        .unwrap()
-                        .append(mess.metadata.transcript);
+                    log::debug!("Response: {:?}", mess.metadata.transcript);
                 }
                 ReadMessage::EndOfTranscript(_) => return,
                 _ => {}
@@ -88,5 +63,4 @@ async fn handle_socket(socket: WebSocket) {
     )
     .unwrap();
 
-    mock_store.lock().unwrap().print();
 }
