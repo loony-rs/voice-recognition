@@ -9,4 +9,6 @@ extern crate serde;
 pub mod batch;
 #[cfg(feature = "realtime")]
 pub mod realtime;
+#[cfg(feature = "realtime")]
+pub mod config;
 

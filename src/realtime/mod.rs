@@ -1,5 +1,4 @@
 //! This module is the main entrypoint for all realtime-related code, including the creation of session structs
-
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use futures::{

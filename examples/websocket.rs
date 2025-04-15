@@ -6,6 +6,7 @@ use axum::{
 };
 use axum::extract::ws::WebSocket;
 use futures::stream::{SplitStream, SplitSink};
+use loony_speechmatics::realtime::models::{self, EndOfStream, StartRecognition};
 use loony_speechmatics::realtime::ReadMessage;
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
@@ -16,7 +17,7 @@ use url::Url;
 use base64::{engine::general_purpose, Engine as _};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-// use loony_speechmatics::realtime::ReadMessage;
+use loony_speechmatics::config::{get_audio_format, get_transcription_config};
 
 type SpeechmaticsSender = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 type SpeechmaticsReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
@@ -77,30 +78,7 @@ async fn websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
 async fn handle_socket(socket: WebSocket) {
     let ( _, mut receiver) = socket.split();
     let (mut speechmatics_sender, mut speechmatics_receiver) = connect_speechmatics().await.unwrap();
-
-    let msg = serde_json::json!({
-        "message": "StartRecognition",
-        "audio_format": {
-          "type": "raw",
-          "encoding": "pcm_s16le",
-          "sample_rate": 16000
-        },
-        "transcription_config": {
-          "language": "en",
-          "operating_point": "enhanced",
-          "output_locale": "en-US",
-          "additional_vocab": ["gnocchi", "bucatini", "bigoli"],
-          "diarization": "speaker",
-          "enable_partials": false
-        },
-        "translation_config": {
-          "target_languages": [],
-          "enable_partials": false
-        },
-        "audio_events_config": {
-          "types": ["applause", "music"]
-        }
-      });
+    let start_recognition_msg = start_recognition_msg().unwrap();
 
     let handle1 = tokio::spawn(async move {
         let _ = SpeechmaticsReceiverDrop;
@@ -110,13 +88,10 @@ async fn handle_socket(socket: WebSocket) {
                 match data {
                     axum::extract::ws::Message::Text(utf8_bytes) => {
                         if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
-                            speechmatics_sender.send(tungstenite::Message::Text(msg.to_string())).await.unwrap();
+                            speechmatics_sender.send(tungstenite::Message::Text(start_recognition_msg.to_string())).await.unwrap();
                         }
                         if utf8_bytes.as_str() == "STOP_VOICE_RECORDING" {
-                            let close_msg = serde_json::json!({
-                                "message": "EndOfStream",
-                                "last_seq_no": last_seq_no
-                            });
+                            let close_msg = end_stream_msg(last_seq_no).unwrap();
                             speechmatics_sender.send(tungstenite::Message::Text(close_msg.to_string())).await.unwrap();
     
                         }
@@ -171,4 +146,26 @@ async fn handle_socket(socket: WebSocket) {
         }
     });
 
+}
+
+
+fn start_recognition_msg() -> anyhow::Result<Message> {
+    let message: models::StartRecognition = StartRecognition::new(
+        get_audio_format(), 
+        models::start_recognition::Message::StartRecognition, 
+        get_transcription_config()
+    );
+    let serialised_msg = serde_json::to_string(&message)?;
+    let ws_message = Message::from(serialised_msg);
+    Ok(ws_message)
+}
+
+fn end_stream_msg(last_seq_no: i32) -> anyhow::Result<Message> {
+    let message = EndOfStream {
+        last_seq_no,
+        message: models::end_of_stream::Message::EndOfStream,
+    };
+    let serialised_msg = serde_json::to_string(&message)?;
+    let ws_message = Message::from(serialised_msg);
+    Ok(ws_message)
 }
