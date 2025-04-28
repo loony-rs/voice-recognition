@@ -1,8 +1,12 @@
+use std::fmt::format;
+use std::sync::Arc;
+
 use axum::{
     extract::WebSocketUpgrade,
     response::IntoResponse,
     routing::get,
     Router,
+    extract::State
 };
 use axum::extract::ws::WebSocket;
 use futures::stream::{SplitStream, SplitSink};
@@ -22,17 +26,26 @@ use voice_recognition::config::{get_audio_format, get_transcription_config};
 type SpeechmaticsSender = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 type SpeechmaticsReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
 
+struct AppState {
+    api_key: String
+}
+
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
-
-  // build our application with a single route
-  let app = Router::new().route("/", get(websocket_handler));
-
-  // run our app with hyper, listening globally on port 3000
-  let listener = tokio::net::TcpListener::bind("localhost:2000").await.unwrap();
-  log::info!("Listening on localhost:2000");
-  axum::serve(listener, app).await.unwrap();
+    env_logger::init();
+    let api_key = std::env::var("API_KEY").unwrap();
+    let port = std::env::var("PORT").unwrap_or("2000".to_string());
+    let port = port.parse::<i32>().unwrap();
+    let app_state = AppState {
+        api_key
+    };
+    
+    let app = Router::new().route("/", get(websocket_handler)).with_state(Arc::new(app_state));
+    let url = format!("127.0.0.1:{}", port);
+    
+    let listener = tokio::net::TcpListener::bind(&url).await.unwrap();
+    log::info!("Listening on {}", url);
+    axum::serve(listener, app).await.unwrap();
 }
 
 struct SpeechmaticsReceiverDrop;
@@ -43,41 +56,17 @@ impl Drop for SpeechmaticsReceiverDrop {
     }
 }
 
-
-async fn connect_speechmatics() -> std::result::Result<(SpeechmaticsSender, SpeechmaticsReceiver), ()> {
-    let url = Url::parse("wss://eu2.rt.speechmatics.com/v2?jwt=evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6").unwrap();
-    let sec_key: String = thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(16)
-        .map(char::from)
-        .collect();
-    let b64 = general_purpose::STANDARD.encode(sec_key);
-
-    let request = http::Request::builder()
-        .method("GET")
-        .uri(url.as_str())
-        .header("Host", "eu2.rt.speechmatics.com")
-        .header("Authorization", "Bearer evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6")
-        .header("Sec-WebSocket-Key", b64)
-        .header("Connection", "keep-alive, Upgrade")
-        .header("Upgrade", "websocket")
-        .header("Sec-WebSocket-Version", "13")
-        .body(())
-        .unwrap();
-
-    let (speechmatics_stream, _) = connect_async(request).await.expect("Failed to connect");
-    Ok(speechmatics_stream.split())
-}
-
 /// WebSocket handler
-async fn websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(handle_socket)
+async fn websocket_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    ws.on_upgrade(|socket| async {
+        handle_socket(socket, state).await;
+    })
 }
 
 /// Handles the WebSocket connection
-async fn handle_socket(socket: WebSocket) {
+async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     let ( _, mut receiver) = socket.split();
-    let (mut speechmatics_sender, mut speechmatics_receiver) = connect_speechmatics().await.unwrap();
+    let (mut speechmatics_sender, mut speechmatics_receiver) = connect_speechmatics(state.api_key.clone()).await.unwrap();
     let start_recognition_msg = start_recognition_msg().unwrap();
 
     let handle1 = tokio::spawn(async move {
@@ -148,6 +137,32 @@ async fn handle_socket(socket: WebSocket) {
 
 }
 
+async fn connect_speechmatics(api_key: String) -> std::result::Result<(SpeechmaticsSender, SpeechmaticsReceiver), ()> {
+    let url = format!("wss://eu2.rt.speechmatics.com/v2?jwt={}", api_key);
+    let authorization = format!("Bearer {}", api_key); 
+    let url = Url::parse(&url).unwrap();
+    let sec_key: String = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect();
+    let b64 = general_purpose::STANDARD.encode(sec_key);
+
+    let request = http::Request::builder()
+        .method("GET")
+        .uri(url.as_str())
+        .header("Host", "eu2.rt.speechmatics.com")
+        .header("Authorization", &authorization)
+        .header("Sec-WebSocket-Key", b64)
+        .header("Connection", "keep-alive, Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .body(())
+        .unwrap();
+
+    let (speechmatics_stream, _) = connect_async(request).await.expect("Failed to connect");
+    Ok(speechmatics_stream.split())
+}
 
 fn start_recognition_msg() -> anyhow::Result<Message> {
     let message: models::StartRecognition = StartRecognition::new(

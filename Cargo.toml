@@ -40,6 +40,14 @@ tracing = "0.1.41"
 version = "1.12.0"
 features = ["attributes"]
 
+[[bin]]
+name = "stream_speechmatics"
+path = "src/bin/speechmatics.rs"
+
+[[bin]]
+name = "stream_ms"
+path = "src/bin/microsoft.rs"
+
 [features]
 default=["realtime", "batch"]
 realtime = ["dep:tokio-tungstenite", "dep:tokio", "dep:http"]

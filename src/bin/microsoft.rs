@@ -77,6 +77,8 @@ async fn main() {
     env_logger::init();
     let ms_subscription_key = env::var("MSSubscriptionKey").unwrap();
     let ms_service_region = env::var("MSServiceRegion").unwrap();
+    let port = std::env::var("PORT").unwrap_or("2000".to_string());
+    let port = port.parse::<i32>().unwrap();
 
     let app_state = AppState {
         config: MsConfig {  ms_service_region, ms_subscription_key }
@@ -84,10 +86,12 @@ async fn main() {
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .with_state(Arc::new(app_state));
+    let url = format!("127.0.0.1:{}", port);
     
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:2000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&url).await.unwrap();
 
-    log::info!("Listening on port 2000");
+    log::info!("Listening on {}", url);
+
     axum::serve(listener, app.into_make_service())
         .await
         .unwrap();

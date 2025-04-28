@@ -15,4 +15,3 @@ pub mod microsoft;
 
 #[cfg(feature = "realtime")]
 pub mod config;
-
