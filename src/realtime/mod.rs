@@ -1,7 +1,5 @@
 //! This module is the main entrypoint for all realtime-related code, including the creation of session structs
-
 use anyhow::Result;
-use axum::extract::ws::WebSocket;
 use base64::{engine::general_purpose, Engine as _};
 use futures::{
     pin_mut,
@@ -42,7 +40,7 @@ pub const DEFAULT_RT_URL: &str = "wss://neu.rt.speechmatics.com/v2/en";
 
 /// The default ISO language code, which sets it to English.
 pub const DEFAULT_LANGUAGE: &str = "en";
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+// const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Enum of all messages that can be read by an end user. This enum is passed to the receive channel that can be used to read messages
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,7 +135,7 @@ impl RealtimeSession {
     /// # Example
     ///
     /// ```
-    /// use speechmatics::realtime::RealtimeSession;
+    /// use loony_speechmatics::realtime::RealtimeSession;
     ///
     /// let rt_session = RealtimeSession::new("YOUR_API_KEY", None).unwrap();
     /// ```
@@ -154,10 +152,10 @@ impl RealtimeSession {
         if let Some(temp_url) = rt_url {
             url = temp_url
         }
-        let formatted_url = format!("{}?sm-sdk=rust-{}", url, VERSION);
+        // let formatted_url = format!("{}?sm-sdk=rust-{}", url, VERSION);
         let sesh = Self {
             auth_token,
-            rt_url: formatted_url,
+            rt_url: url,
             internal_message_sender: channel_sender,
         };
         Ok((sesh, channel_receiver))
@@ -238,7 +236,7 @@ impl RealtimeSession {
                         continue;
                     }
                 };
-                debug!("{:?}", message);
+                
                 let bin_data = message.into_data();
                 // this deserialise will fail if not the right message type
                 match serde_json::from_slice::<models::RecognitionStarted>(&bin_data) {
@@ -324,7 +322,7 @@ impl RealtimeSession {
             .await?;
 
         let sender = &self.internal_message_sender.clone();
-        let process_messages = { RealtimeSession::process_messages(sock_receiver, sender) };
+        let process_messages = { RealtimeSession::process_messages(&mut sock_receiver, sender) };
         let send_audio = { sock_sender.send_audio(reader) };
 
         pin_mut!(process_messages, send_audio);
@@ -343,39 +341,8 @@ impl RealtimeSession {
         Ok(())
     }
 
-    /// Test run
-    pub async fn test_run(
-        &mut self,
-        config: SessionConfig,
-        socket: WebSocket
-    ) -> Result<(), anyhow::Error> {
-        let (mut sock_sender, mut sock_receiver) = self.connect().await?;
-        sock_sender.start_recognition(config).await?;
-        self.wait_for_start(&mut sock_receiver, &self.internal_message_sender.clone())
-            .await?;
-
-        let sender = &self.internal_message_sender.clone();
-        let process_messages = { RealtimeSession::process_messages(sock_receiver, sender) };
-        let send_audio = { sock_sender.handle_socket_connection(socket) };
-
-        pin_mut!(process_messages, send_audio);
-        let (messages_res, audio_res) = join!(process_messages, send_audio);
-        match audio_res {
-            Ok(_) => debug!("No issues in audio processing task"),
-            Err(err) => return Err(err),
-        };
-        match messages_res {
-            Ok(_) => debug!("No issues detected whilst processing server-sent messages"),
-            Err(err) => {
-                error!("{:?}", err);
-                return Err(err);
-            }
-        };
-        Ok(())
-    }
-
     async fn process_messages(
-        mut receiver: SplitStreamAlias,
+        receiver: &mut SplitStreamAlias,
         channel_sender: &tokio::sync::mpsc::UnboundedSender<ReadMessage>,
     ) -> Result<()> {
         let mut running = true;
@@ -383,7 +350,6 @@ impl RealtimeSession {
             let result = receiver.next().await;
             if let Some(val) = result {
                 let mess = val?;
-                debug!("{}", mess);
                 let data = mess.into_data();
                 // Parse the string of data into serde_json::Value.
                 let value = from_slice::<ReadMessage>(&data)?;
@@ -464,41 +430,6 @@ impl SenderWrapper {
         }
     }
 
-    async fn handle_socket_connection(
-        &mut self,
-        mut websocket: WebSocket,
-        // config: SessionConfig
-    ) -> Result<()> {
-        while let Some(data) = websocket.next().await {
-            if let Ok(data) = data {
-                match  data {
-                    axum::extract::ws::Message::Text(utf8_bytes) => {
-                        let msg = utf8_bytes.to_string();
-                        // if &msg == "start" {
-                        //     self.start_recognition(config.clone()).await?;
-                        // }
-                        if &msg == "close" {
-                            self.send_close(self.last_seq_no).await?;
-                            break;
-                        }
-                    },
-                    axum::extract::ws::Message::Binary(bytes) => {
-                        let x = Message::from(&bytes[..]);
-                        println!("data: {:?}", x);
-                        self.send_message(x).await?;
-                        self.last_seq_no += 1;
-                    },
-                    axum::extract::ws::Message::Close(_) => {
-                        self.send_close(self.last_seq_no).await?;
-                        break;
-                    },
-                    _ => {}
-                }
-            }
-        };
-        Ok(())
-    }
-
     async fn send_message(&mut self, message: Message) -> Result<()> {
         let mut retries = 0;
         let max_retries = 5;
@@ -507,9 +438,9 @@ impl SenderWrapper {
             match self.socket.send(message.clone()).await {
                 Ok(()) => (),
                 Err(err) => {
+                    println!("err: {:?}", err);
                     retries += 1;
                     if retries >= max_retries {
-                        error!("{:?}", err);
                         self.socket.send(message).await?;
                         panic!("arg too many attempts to send")
                     }
@@ -533,7 +464,6 @@ impl SenderWrapper {
         }
         let serialised_msg = serde_json::to_string(&message)?;
         let ws_message = Message::from(serialised_msg);
-        println!("sending StartRecognition message {:?}", ws_message);
         self.send_message(ws_message).await
     }
 
@@ -544,81 +474,5 @@ impl SenderWrapper {
         println!("{}", serialised_msg);
         let tungstenite_msg = Message::from(serialised_msg);
         self.send_message(tungstenite_msg).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::realtime::*;
-    use std::{
-        path::PathBuf,
-        sync::{Arc, Mutex},
-    };
-    use tokio::{self, fs::File, try_join};
-
-    struct MockStore {
-        transcript: String,
-    }
-
-    impl MockStore {
-        pub fn new() -> Self {
-            Self {
-                transcript: "".to_owned(),
-            }
-        }
-
-        pub fn append(&mut self, transcript: String) {
-            self.transcript = format!("{} {}", self.transcript, transcript);
-        }
-
-        pub fn print(&self) {
-            print!("{}", self.transcript)
-        }
-    }
-
-    #[tokio::test]
-    async fn test_basic_flow() {
-        let api_key: String = std::env::var("API_KEY").unwrap();
-        let (mut rt_session, mut receive_channel) = RealtimeSession::new(api_key, None).unwrap();
-
-        let test_file_path = PathBuf::new()
-            .join(".")
-            .join("tests")
-            .join("data")
-            .join("example.wav");
-
-        let file = File::open(test_file_path).await.unwrap();
-
-        let mut config: SessionConfig = Default::default();
-        let audio_config = models::AudioFormat::new(models::audio_format::Type::File);
-        config.audio_format = Some(audio_config);
-
-        let mock_store = Arc::new(Mutex::new(MockStore::new()));
-        let mock_store_clone = mock_store.clone();
-
-        let message_task = tokio::spawn(async move {
-            while let Some(message) = receive_channel.recv().await {
-                match message {
-                    ReadMessage::AddTranscript(mess) => {
-                        mock_store_clone
-                            .lock()
-                            .unwrap()
-                            .append(mess.metadata.transcript);
-                    }
-                    ReadMessage::EndOfTranscript(_) => return,
-                    _ => {}
-                }
-            }
-        });
-
-        let run_task = { rt_session.run(config, file) };
-
-        try_join!(
-            async move { message_task.await.map_err(anyhow::Error::from) },
-            run_task
-        )
-        .unwrap();
-
-        mock_store.lock().unwrap().print();
     }
 }

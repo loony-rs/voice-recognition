@@ -1,0 +1,171 @@
+use axum::{
+    extract::WebSocketUpgrade,
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use axum::extract::ws::WebSocket;
+use futures::stream::{SplitStream, SplitSink};
+use loony_speechmatics::realtime::models::{self, EndOfStream, StartRecognition};
+use loony_speechmatics::realtime::ReadMessage;
+use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
+use futures::{SinkExt, StreamExt};
+use tokio_tungstenite::connect_async;
+use url::Url;
+use base64::{engine::general_purpose, Engine as _};
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+use loony_speechmatics::config::{get_audio_format, get_transcription_config};
+
+type SpeechmaticsSender = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
+type SpeechmaticsReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;
+
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt::init();
+
+  // build our application with a single route
+  let app = Router::new().route("/", get(websocket_handler));
+
+  // run our app with hyper, listening globally on port 3000
+  let listener = tokio::net::TcpListener::bind("localhost:2000").await.unwrap();
+  log::info!("Listening on localhost:2000");
+  axum::serve(listener, app).await.unwrap();
+}
+
+struct SpeechmaticsReceiverDrop;
+
+impl Drop for SpeechmaticsReceiverDrop {
+    fn drop(&mut self) {
+        log::info!("SpeechmaticsReceiverDropped");
+    }
+}
+
+
+async fn connect_speechmatics() -> std::result::Result<(SpeechmaticsSender, SpeechmaticsReceiver), ()> {
+    let url = Url::parse("wss://eu2.rt.speechmatics.com/v2?jwt=evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6").unwrap();
+    let sec_key: String = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect();
+    let b64 = general_purpose::STANDARD.encode(sec_key);
+
+    let request = http::Request::builder()
+        .method("GET")
+        .uri(url.as_str())
+        .header("Host", "eu2.rt.speechmatics.com")
+        .header("Authorization", "Bearer evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6")
+        .header("Sec-WebSocket-Key", b64)
+        .header("Connection", "keep-alive, Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .body(())
+        .unwrap();
+
+    let (speechmatics_stream, _) = connect_async(request).await.expect("Failed to connect");
+    Ok(speechmatics_stream.split())
+}
+
+/// WebSocket handler
+async fn websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(handle_socket)
+}
+
+/// Handles the WebSocket connection
+async fn handle_socket(socket: WebSocket) {
+    let ( _, mut receiver) = socket.split();
+    let (mut speechmatics_sender, mut speechmatics_receiver) = connect_speechmatics().await.unwrap();
+    let start_recognition_msg = start_recognition_msg().unwrap();
+
+    let handle1 = tokio::spawn(async move {
+        let _ = SpeechmaticsReceiverDrop;
+        let mut last_seq_no = 0;
+        while let Some(data) = receiver.next().await {
+            if let Ok(data) = data {
+                match data {
+                    axum::extract::ws::Message::Text(utf8_bytes) => {
+                        if utf8_bytes.as_str() == "START_VOICE_RECORDING" {
+                            speechmatics_sender.send(tungstenite::Message::Text(start_recognition_msg.to_string())).await.unwrap();
+                        }
+                        if utf8_bytes.as_str() == "STOP_VOICE_RECORDING" {
+                            let close_msg = end_stream_msg(last_seq_no).unwrap();
+                            speechmatics_sender.send(tungstenite::Message::Text(close_msg.to_string())).await.unwrap();
+    
+                        }
+                    },
+                    axum::extract::ws::Message::Binary(bytes) => {
+                        speechmatics_sender.send(tungstenite::Message::binary(bytes.to_vec())).await.unwrap();
+                        last_seq_no += 1;
+                        
+                    },
+                    _ => {}
+                }
+            }
+        }
+      });
+
+
+    tokio::spawn(async move {
+        let _ = SpeechmaticsReceiverDrop;
+        loop {
+            let value = speechmatics_receiver.next().await;
+            if let Some(value) = value {
+                match value {
+                    Ok(msg) => {
+                        println!("{:?}", msg);
+                        let data = msg.into_data();
+                        let data = serde_json::from_slice::<ReadMessage>(&data);
+                        if let Ok(data) = data {
+                            match data {
+                                ReadMessage::RecognitionStarted(_) => {
+                                    log::info!("RecognitionStarted");
+                                },
+                                ReadMessage::Error(error) => {
+                                    log::error!("Error: {:?}", error);
+                                },
+                                ReadMessage::AddTranscript(message) => {
+                                    log::info!("{:?}", message.metadata.transcript);
+                                },
+                                ReadMessage::EndOfTranscript(_) => {
+                                    log::info!("EndOfTranscript");
+                                    handle1.abort();
+                                    break;
+                                },
+                                _ => {}
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        log::error!("{:?}", err);
+                    },
+                }
+            }
+        }
+    });
+
+}
+
+
+fn start_recognition_msg() -> anyhow::Result<Message> {
+    let message: models::StartRecognition = StartRecognition::new(
+        get_audio_format(), 
+        models::start_recognition::Message::StartRecognition, 
+        get_transcription_config()
+    );
+    let serialised_msg = serde_json::to_string(&message)?;
+    let ws_message = Message::from(serialised_msg);
+    Ok(ws_message)
+}
+
+fn end_stream_msg(last_seq_no: i32) -> anyhow::Result<Message> {
+    let message = EndOfStream {
+        last_seq_no,
+        message: models::end_of_stream::Message::EndOfStream,
+    };
+    let serialised_msg = serde_json::to_string(&message)?;
+    let ws_message = Message::from(serialised_msg);
+    Ok(ws_message)
+}

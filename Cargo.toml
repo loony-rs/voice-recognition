@@ -1,5 +1,5 @@
 [package]
-name = "speechmatics"
+name = "loony-speechmatics"
 version = "0.3.3"
 edition = "2021"
 keywords = ["websocket", "speechmatics", "asr", "async"]
@@ -27,7 +27,7 @@ tokio = { version = "1.33", features = ["macros", "rt", "sync", "rt-multi-thread
 url = "2.4.1"
 reqwest = { version = "0.11.20", features = ["multipart", "stream", "json"], optional = true }
 futures-util = "0.3.31"
-axum = { version="0.8.1", default-features=true, features=["ws"]}
+axum = { version="0.8.1", default-features=true, features=["ws", "http2", "http1"]}
 env_logger = "0.11.6"
 futures-channel = "0.3.31"
 cognitive-services-speech-sdk-rs = "1.0.6"
@@ -44,10 +44,6 @@ features = ["attributes"]
 default=["realtime", "batch"]
 realtime = ["dep:tokio-tungstenite", "dep:tokio", "dep:http"]
 batch = ["dep:reqwest", "dep:rand"]
-
-[[example]]
-name = "test-realtime"
-path = "examples/test-realtime.rs"
 
 [[example]]
 name = "realtim-basic"
