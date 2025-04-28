@@ -6,8 +6,8 @@ use axum::{
 };
 use axum::extract::ws::WebSocket;
 use futures::stream::{SplitStream, SplitSink};
-use loony_speechmatics::realtime::models::{self, EndOfStream, StartRecognition};
-use loony_speechmatics::realtime::ReadMessage;
+use voice_recognition::realtime::models::{self, EndOfStream, StartRecognition};
+use voice_recognition::realtime::ReadMessage;
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{tungstenite, MaybeTlsStream, WebSocketStream};
@@ -17,7 +17,7 @@ use url::Url;
 use base64::{engine::general_purpose, Engine as _};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use loony_speechmatics::config::{get_audio_format, get_transcription_config};
+use voice_recognition::config::{get_audio_format, get_transcription_config};
 
 type SpeechmaticsSender = SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>;
 type SpeechmaticsReceiver = SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>;

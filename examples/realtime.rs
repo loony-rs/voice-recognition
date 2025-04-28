@@ -9,7 +9,7 @@ use axum::{
 };
 use futures::{stream::StreamExt, SinkExt};
 use axum::extract::ws::{Message as AxumMessage, WebSocket};
-use speechmatics::microsoft::{set_callbacks, speech_recognizer_from_push_stream, MsConfig};
+use voice_recognition::microsoft::{set_callbacks, speech_recognizer_from_push_stream, MsConfig};
 use tokio::time::sleep;
 use std::env;
 

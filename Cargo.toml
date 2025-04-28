@@ -1,14 +1,14 @@
 [package]
-name = "loony-speechmatics"
+name = "voice-recognition"
 version = "0.3.3"
 edition = "2021"
-keywords = ["websocket", "speechmatics", "asr", "async"]
+keywords = ["websocket", "voice-recognition", "asr", "async"]
 authors = ["Tudor Evans"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/speechmatics/speechmatics-rs"
-repository = "https://github.com/speechmatics/speechmatics-rs"
-description = "An async rust SDK for the Speechmatics API"
+homepage = "https://github.com/loony-rs/voice-recognition"
+repository = "https://github.com/loony-rs/voice-recognition"
+description = "An async rust SDK for the Voice-Recognition APIS"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
