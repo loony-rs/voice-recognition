@@ -488,7 +488,7 @@ impl SenderWrapper {
                         self.send_message(x).await?;
                         self.last_seq_no += 1;
                     },
-                    axum::extract::ws::Message::Close(close_frame) => {
+                    axum::extract::ws::Message::Close(_) => {
                         self.send_close(self.last_seq_no).await?;
                         break;
                     },
@@ -533,7 +533,7 @@ impl SenderWrapper {
         }
         let serialised_msg = serde_json::to_string(&message)?;
         let ws_message = Message::from(serialised_msg);
-        info!("sending StartRecognition message {:?}", ws_message);
+        println!("sending StartRecognition message {:?}", ws_message);
         self.send_message(ws_message).await
     }
 
@@ -541,6 +541,7 @@ impl SenderWrapper {
         let message =
             models::EndOfStream::new(last_seq_no, models::end_of_stream::Message::EndOfStream);
         let serialised_msg = serde_json::to_string(&message)?;
+        println!("{}", serialised_msg);
         let tungstenite_msg = Message::from(serialised_msg);
         self.send_message(tungstenite_msg).await
     }

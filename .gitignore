@@ -2,7 +2,8 @@
 /Cargo.lock
 .DS_Store
 .vscode
-
+audio/
+run.sh
 # Added by cargo
 #
 # already existing elements were commented out
