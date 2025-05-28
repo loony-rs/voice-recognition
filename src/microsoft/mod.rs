@@ -1,40 +1,29 @@
 use cognitive_services_speech_sdk_rs::audio::{
     AudioConfig, AudioStreamFormat, PullAudioInputStream, PushAudioInputStream,
 };
+use cognitive_services_speech_sdk_rs::common::ProfanityOption;
+// use cognitive_services_speech_sdk_rs::ffi::PropertyId_SpeechServiceResponse_PostProcessingOption;
 use cognitive_services_speech_sdk_rs::speech::{SpeechConfig, SpeechRecognizer};
+// use cognitive_services_speech_sdk_rs::ffi::phrase_list_grammar_add_phrase;
+// use cognitive_services_speech_sdk_rs as msspeech;
 use log::*;
-use std::env;
-
-/// convenience function to setup environment variables
-/// subscription key is taken from external file
-pub fn set_env_vars(ms_key_file_path: &str) {
-    let msskey: String = std::fs::read_to_string(ms_key_file_path)
-        .unwrap()
-        .trim()
-        .to_owned();
-
-    env::set_var("MSSubscriptionKey", msskey);
-    env::set_var("MSServiceRegion", "westeurope");
-    env::set_var("RUST_LOG", "debug");
-    env::set_var("RUST_BACKTRACE", "1");
-}
 
 /// Recognizer
 pub fn set_callbacks(speech_recognizer: &mut SpeechRecognizer) {
     speech_recognizer
-        .set_session_started_cb(|event| info!(">set_session_started_cb {:?}", event))
+        .set_session_started_cb(|event| debug!(">set_session_started_cb {:?}", event))
         .unwrap();
 
     speech_recognizer
-        .set_session_stopped_cb(|event| info!(">set_session_stopped_cb {:?}", event))
+        .set_session_stopped_cb(|event| debug!(">set_session_stopped_cb {:?}", event))
         .unwrap();
 
     speech_recognizer
-        .set_speech_start_detected_cb(|event| info!(">set_speech_start_detected_cb {:?}", event))
+        .set_speech_start_detected_cb(|event| debug!(">set_speech_start_detected_cb {:?}", event))
         .unwrap();
 
     speech_recognizer
-        .set_speech_end_detected_cb(|event| info!(">set_speech_end_detected_cb {:?}", event))
+        .set_speech_end_detected_cb(|event| debug!(">set_speech_end_detected_cb {:?}", event))
         .unwrap();
 
     speech_recognizer
@@ -42,22 +31,28 @@ pub fn set_callbacks(speech_recognizer: &mut SpeechRecognizer) {
         .unwrap();
 
     speech_recognizer
-        .set_recognized_cb(|event| info!(">set_recognized_cb {:?}", event))
+        .set_recognized_cb(|event| debug!(">set_recognized_cb {:?}", event))
         .unwrap();
 
     speech_recognizer
-        .set_canceled_cb(|event| info!(">set_canceled_cb {:?}", event))
+        .set_canceled_cb(|event| debug!(">set_canceled_cb {:?}", event))
         .unwrap();
 }
 
 ///creates speech recognizer from provided audio config and implicit speech config
 /// created from MS subscription key hardcoded in sample file
 pub fn speech_recognizer_from_audio_cfg(audio_config: AudioConfig, ms_config: MsConfig) -> SpeechRecognizer {
-    let speech_config = SpeechConfig::from_subscription(
+    let mut speech_config = SpeechConfig::from_subscription(
         ms_config.ms_subscription_key,
         ms_config.ms_service_region,
     )
     .unwrap();
+    speech_config.set_property(cognitive_services_speech_sdk_rs::common::PropertyId::SpeechServiceResponsePostProcessingOption,"TrueText".to_string()).unwrap();
+    // let phrase_list = PhraseListGrammar.FromRecognizer(recognizer);
+
+    speech_config.enable_dictation().unwrap();
+    speech_config.set_profanity_option(ProfanityOption::Removed).unwrap();
+
     let speech_recognizer = SpeechRecognizer::from_config(speech_config, audio_config).unwrap();
     speech_recognizer
 }

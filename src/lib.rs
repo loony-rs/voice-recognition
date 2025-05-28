@@ -11,6 +11,7 @@ pub mod batch;
 pub mod realtime;
 
 /// microsoft
+#[cfg(feature = "ms")]
 pub mod microsoft;
 
 #[cfg(feature = "realtime")]

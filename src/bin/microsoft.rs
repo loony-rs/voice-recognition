@@ -21,7 +21,6 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) ->
     };
     ws.on_upgrade(|socket: WebSocket| async {
         handle_socket(socket, config).await;
-        println!("Websocket closed.");
     })
 }
 
@@ -43,29 +42,25 @@ async fn handle_socket(mut socket: WebSocket, config: MsConfig) {
     while let Some(Ok(msg)) = socket.next().await {
         match msg {
             AxumMessage::Text(text) => {
-                println!("Received text: {}", text);
                 if text == "START_VOICE_RECORDING" {
-                    log::info!("Voice recording started.");
+                    log::debug!("START_VOICE_RECORDING");
                 }
                 if text == "STOP_VOICE_RECORDING" {
-                    log::info!("Voice recording stopped.");
+                    log::debug!("STOP_VOICE_RECORDING");
                     push_stream.close_stream().unwrap();
                     break;
                 }
                
             }
             AxumMessage::Binary(bin) => {
-                println!("Received bytes");
                 push_stream.write(bin).unwrap();
             }
             _ => {}
         }
     }
-    log::info!("socket work finished");
     handle.await.unwrap();
-    log::info!("Finished.");
     socket.close().await.unwrap();
-
+    println!("Websocket closed.");
 }
 
 struct AppState {

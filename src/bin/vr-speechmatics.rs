@@ -1,4 +1,3 @@
-use std::fmt::format;
 use std::sync::Arc;
 
 use axum::{
@@ -80,9 +79,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                             speechmatics_sender.send(tungstenite::Message::Text(start_recognition_msg.to_string())).await.unwrap();
                         }
                         if utf8_bytes.as_str() == "STOP_VOICE_RECORDING" {
-                            let close_msg = end_stream_msg(last_seq_no).unwrap();
-                            speechmatics_sender.send(tungstenite::Message::Text(close_msg.to_string())).await.unwrap();
-    
+                            // let close_msg = end_stream_msg(last_seq_no).unwrap();
+                            // speechmatics_sender.send(tungstenite::Message::Text(close_msg.to_string())).await.unwrap();
                         }
                     },
                     axum::extract::ws::Message::Binary(bytes) => {

@@ -30,7 +30,7 @@ futures-util = "0.3.31"
 axum = { version="0.8.1", default-features=true, features=["ws", "http2", "http1"]}
 env_logger = "0.11.6"
 futures-channel = "0.3.31"
-cognitive-services-speech-sdk-rs = "1.0.6"
+cognitive-services-speech-sdk-rs = { version = "1.0.6", optional = true }
 tracing-subscriber = "0.3.19"
 tower-http = { version = "0.6.2", features = ["fs", "trace"]}
 axum-extra = { version = "0.10.1", features = ["typed-header"]}
@@ -40,16 +40,10 @@ tracing = "0.1.41"
 version = "1.12.0"
 features = ["attributes"]
 
-[[bin]]
-name = "stream_speechmatics"
-path = "src/bin/speechmatics.rs"
-
-[[bin]]
-name = "stream_ms"
-path = "src/bin/microsoft.rs"
-
 [features]
 default=["realtime", "batch"]
+speechmatics=[]
+ms=["dep:cognitive-services-speech-sdk-rs"]
 realtime = ["dep:tokio-tungstenite", "dep:tokio", "dep:http"]
 batch = ["dep:reqwest", "dep:rand"]
 
