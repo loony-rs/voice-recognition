@@ -1,4 +1,4 @@
-use loony_speechmatics::realtime::*;
+use voice_recognition::realtime::*;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},

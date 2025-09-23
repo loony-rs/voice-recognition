@@ -1,4 +1,4 @@
-use loony_speechmatics::batch::{
+use voice_recognition::batch::{
     models::{self, JobConfig, TranscriptionConfig},
     BatchClient,
 };

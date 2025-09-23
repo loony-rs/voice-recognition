@@ -9,6 +9,10 @@ extern crate serde;
 pub mod batch;
 #[cfg(feature = "realtime")]
 pub mod realtime;
+
+/// microsoft
+#[cfg(feature = "ms")]
+pub mod microsoft;
+
 #[cfg(feature = "realtime")]
 pub mod config;
-

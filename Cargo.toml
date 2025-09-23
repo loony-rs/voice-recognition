@@ -1,14 +1,14 @@
 [package]
-name = "loony-speechmatics"
+name = "voice-recognition"
 version = "0.3.3"
 edition = "2021"
-keywords = ["websocket", "speechmatics", "asr", "async"]
+keywords = ["websocket", "voice-recognition", "asr", "async"]
 authors = ["Tudor Evans"]
 license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/speechmatics/speechmatics-rs"
-repository = "https://github.com/speechmatics/speechmatics-rs"
-description = "An async rust SDK for the Speechmatics API"
+homepage = "https://github.com/loony-rs/voice-recognition"
+repository = "https://github.com/loony-rs/voice-recognition"
+description = "An async rust SDK for the Voice-Recognition APIS"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -30,7 +30,10 @@ futures-util = "0.3.31"
 axum = { version="0.8.1", default-features=true, features=["ws", "http2", "http1"]}
 env_logger = "0.11.6"
 futures-channel = "0.3.31"
+cognitive-services-speech-sdk-rs = { version = "1.0.6", optional = true }
 tracing-subscriber = "0.3.19"
+tower-http = { version = "0.6.2", features = ["fs", "trace"]}
+axum-extra = { version = "0.10.1", features = ["typed-header"]}
 tracing = "0.1.41"
 
 [dev-dependencies.async-std]
@@ -38,7 +41,9 @@ version = "1.12.0"
 features = ["attributes"]
 
 [features]
-default=["realtime", "batch"]
+default=["realtime", "batch", "ms"]
+speechmatics=[]
+ms=["dep:cognitive-services-speech-sdk-rs"]
 realtime = ["dep:tokio-tungstenite", "dep:tokio", "dep:http"]
 batch = ["dep:reqwest", "dep:rand"]
 
