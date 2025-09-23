@@ -28,10 +28,11 @@ async fn main() {
 
   // build our application with a single route
   let app = Router::new().route("/", get(websocket_handler));
-
+  let port = std::env::var("PORT").unwrap();
+  let tcp_url = format!("localhost:{}", port);
   // run our app with hyper, listening globally on port 3000
-  let listener = tokio::net::TcpListener::bind("localhost:2000").await.unwrap();
-  log::info!("Listening on localhost:2000");
+  let listener = tokio::net::TcpListener::bind(&tcp_url).await.unwrap();
+  log::info!("Listening on localhost:{}", port);
   axum::serve(listener, app).await.unwrap();
 }
 
@@ -45,7 +46,8 @@ impl Drop for SpeechmaticsReceiverDrop {
 
 
 async fn connect_speechmatics() -> std::result::Result<(SpeechmaticsSender, SpeechmaticsReceiver), ()> {
-    let url = Url::parse("wss://eu2.rt.speechmatics.com/v2?jwt=evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6").unwrap();
+    let key = std::env::var("API_KEY").unwrap();
+    let url = Url::parse(&format!("wss://eu2.rt.speechmatics.com/v2?jwt={}", key)).unwrap();
     let sec_key: String = thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
@@ -57,7 +59,7 @@ async fn connect_speechmatics() -> std::result::Result<(SpeechmaticsSender, Spee
         .method("GET")
         .uri(url.as_str())
         .header("Host", "eu2.rt.speechmatics.com")
-        .header("Authorization", "Bearer evK20Lpk7TTRtpNAv0Cbh4pCBzvr32Y6")
+        .header("Authorization", &format!("Bearer {}", key))
         .header("Sec-WebSocket-Key", b64)
         .header("Connection", "keep-alive, Upgrade")
         .header("Upgrade", "websocket")
@@ -110,12 +112,12 @@ async fn handle_socket(socket: WebSocket) {
 
     tokio::spawn(async move {
         let _ = SpeechmaticsReceiverDrop;
+
         loop {
             let value = speechmatics_receiver.next().await;
             if let Some(value) = value {
                 match value {
                     Ok(msg) => {
-                        println!("{:?}", msg);
                         let data = msg.into_data();
                         let data = serde_json::from_slice::<ReadMessage>(&data);
                         if let Ok(data) = data {
@@ -126,13 +128,13 @@ async fn handle_socket(socket: WebSocket) {
                                 ReadMessage::Error(error) => {
                                     log::error!("Error: {:?}", error);
                                 },
-                                ReadMessage::AddTranscript(message) => {
-                                    log::info!("{:?}", message.metadata.transcript);
-                                },
-                                ReadMessage::EndOfTranscript(_) => {
-                                    log::info!("EndOfTranscript");
+                                ReadMessage::EndOfTranscript(msg) => {
+                                    log::info!("EndOfTranscript: {:?}", msg);
                                     handle1.abort();
                                     break;
+                                },
+                                ReadMessage::AddTranscript(msg) => {
+                                    log::info!("AddTranscript: {:?}", msg.metadata.transcript);
                                 },
                                 _ => {}
                             }

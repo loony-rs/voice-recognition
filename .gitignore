@@ -3,6 +3,7 @@
 .DS_Store
 .vscode
 .archive
+run.sh
 
 # Added by cargo
 #
